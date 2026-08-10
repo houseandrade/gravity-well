@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<title>Gravity Well</title>
+<style>
+  :root{
+    --void-1:#0b0714;
+    --void-2:#160b28;
+    --void-3:#1f1038;
+    --disk-hot:#ff6fae;
+    --disk-warm:#ffd166;
+    --disk-cool:#7c5cff;
+    --ink:#f1eaff;
+    --ink-dim:#a99bd6;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{
+    margin:0; padding:0; width:100%; height:100%; overflow:hidden;
+    background:var(--void-1);
+    font-family:-apple-system,"Segoe UI Rounded","SF Pro Rounded","Segoe UI",Roboto,sans-serif;
+    touch-action:none;
+    user-select:none;
+    -webkit-user-select:none;
+    -webkit-touch-callout:none;
+    overscroll-behavior:none;
+    overflow:hidden;
+    height:100dvh;
+  }
+  #stage{position:fixed; inset:0; display:block; touch-action:none;}
+
+  #hud{
+    position:fixed; top:0; left:0; right:0;
+    padding:calc(16px + env(safe-area-inset-top)) calc(18px + env(safe-area-inset-right)) 0 calc(18px + env(safe-area-inset-left));
+    display:flex; flex-direction:column; gap:8px;
+    pointer-events:none;
+    z-index:5;
+  }
+  #hud-top{
+    display:flex; align-items:center; justify-content:space-between;
+    color:var(--ink);
+  }
+  #title{
+    font-size:14px; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--ink-dim); font-weight:600;
+  }
+  #stat{
+    font-size:13px; color:var(--ink-dim); font-variant-numeric:tabular-nums;
+    text-align:right;
+  }
+  #stat b{color:var(--ink); font-weight:700;}
+  #barwrap{
+    width:100%; height:8px; border-radius:99px;
+    background:rgba(255,255,255,0.08);
+    overflow:hidden;
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,0.05);
+  }
+  #bar{
+    height:100%; width:0%;
+    background:linear-gradient(90deg,var(--disk-cool),var(--disk-hot),var(--disk-warm));
+    border-radius:99px;
+    transition:width .35s cubic-bezier(.2,.9,.3,1);
+  }
+
+  #mute{
+    position:fixed; bottom:calc(18px + env(safe-area-inset-bottom)); left:calc(18px + env(safe-area-inset-left)); z-index:6;
+    width:48px; height:48px; border-radius:50%;
+    border:1px solid rgba(255,255,255,0.15);
+    background:rgba(255,255,255,0.06);
+    backdrop-filter:blur(6px);
+    color:var(--ink); font-size:18px;
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer;
+  }
+
+  #hint{
+    position:fixed; bottom:calc(18px + env(safe-area-inset-bottom)); right:calc(18px + env(safe-area-inset-right)); z-index:6;
+    color:var(--ink-dim); font-size:12px; letter-spacing:.03em;
+    text-align:right; pointer-events:none;
+    max-width:200px; line-height:1.5;
+  }
+
+  #overlay{
+    position:fixed; inset:0; z-index:10;
+    display:flex; align-items:center; justify-content:center;
+    background:radial-gradient(circle at 50% 40%, rgba(31,16,56,0.85), rgba(11,7,20,0.96));
+    opacity:0; pointer-events:none;
+    transition:opacity .6s ease;
+  }
+  #overlay.show{opacity:1; pointer-events:auto;}
+  #panel{
+    text-align:center; color:var(--ink);
+    padding:32px;
+  }
+  #panel h1{
+    font-size:clamp(28px,6vw,44px);
+    margin:0 0 6px;
+    background:linear-gradient(90deg,var(--disk-cool),var(--disk-hot) 50%,var(--disk-warm));
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    font-weight:800; letter-spacing:.01em;
+  }
+  #panel p{
+    color:var(--ink-dim); margin:0 0 22px; font-size:14px;
+  }
+  #next{
+    border:none; cursor:pointer;
+    padding:14px 30px; border-radius:99px;
+    font-size:15px; font-weight:700; letter-spacing:.02em;
+    color:var(--void-1);
+    background:linear-gradient(90deg,var(--disk-warm),var(--disk-hot));
+    box-shadow:0 8px 30px rgba(255,111,174,0.35);
+  }
+  #next:active{transform:scale(0.97);}
+
+  #start{
+    position:fixed; inset:0; z-index:11;
+    display:flex; align-items:center; justify-content:center;
+    background:radial-gradient(circle at 50% 40%, var(--void-3), var(--void-1));
+  }
+  #start .panel-inner{text-align:center; color:var(--ink); padding:28px;}
+  #start h1{
+    font-size:clamp(30px,7vw,52px); margin:0 0 8px; font-weight:800;
+    background:linear-gradient(90deg,var(--disk-cool),var(--disk-hot),var(--disk-warm));
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  #start p{color:var(--ink-dim); font-size:14px; max-width:340px; margin:0 auto 26px; line-height:1.6;}
+  #begin{
+    border:none; cursor:pointer;
+    padding:15px 34px; border-radius:99px;
+    font-size:16px; font-weight:700;
+    color:var(--void-1);
+    background:linear-gradient(90deg,var(--disk-warm),var(--disk-hot));
+    box-shadow:0 8px 30px rgba(255,111,174,0.35);
+  }
+</style>
+</head>
+<body>
+
+<canvas id="stage"></canvas>
+
+<div id="hud">
+  <div id="hud-top">
+    <div id="title">Gravity Well</div>
+    <div id="stat"><b id="cleared">0</b>/<span id="total">0</span> cleared &nbsp;·&nbsp; well size <b id="radiusStat">0</b></div>
+  </div>
+  <div id="barwrap"><div id="bar"></div></div>
+</div>
+
+<button id="mute" title="toggle sound">🔊</button>
+<div id="hint">drag anywhere to guide the well<br>it eats anything smaller than itself</div>
+
+<div id="overlay">
+  <div id="panel">
+    <h1>Map Cleared</h1>
+    <p>Every last thing has fallen in.</p>
+    <button id="next">Pull Up a New Map</button>
+  </div>
+</div>
+
+<div id="start">
+  <div class="panel-inner">
+    <h1>Gravity Well</h1>
+    <p>Guide a small black hole around a drifting field of debris. Anything smaller than it gets pulled in and it grows. No hazards, no clock — just clear the map.</p>
+    <button id="begin">Begin</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  const canvas = document.getElementById('stage');
+  const ctx = canvas.getContext('2d');
+  let W, H, DPR;
+  function resize(){
+    DPR = Math.min(window.devicePixelRatio||1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = W*DPR; canvas.height = H*DPR;
+    canvas.style.width = W+'px'; canvas.style.height = H+'px';
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+  window.addEventListener('resize', resize);
+  if(window.visualViewport){
+    window.visualViewport.addEventListener('resize', resize);
+  }
+  resize();
+
+  // stop iOS pinch-zoom / double-tap-zoom / pull-to-refresh from fighting play
+  document.addEventListener('gesturestart', e=>e.preventDefault());
+  document.addEventListener('gesturechange', e=>e.preventDefault());
+  document.addEventListener('touchmove', e=>{ if(e.touches.length>1) e.preventDefault(); }, {passive:false});
+  let lastTap = 0;
+  document.addEventListener('touchend', e=>{
+    const now = Date.now();
+    if(now - lastTap < 300) e.preventDefault();
+    lastTap = now;
+  }, {passive:false});
+
+  // ---------- audio (tiny, gentle, optional) ----------
+  let audioCtx = null, muted = false;
+  function ensureAudio(){
+    if(!audioCtx){
+      try{ audioCtx = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){}
+    }
+  }
+  function pop(freq, size){
+    if(muted || !audioCtx) return;
+    const t = audioCtx.currentTime;
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(freq, t);
+    o.frequency.exponentialRampToValueAtTime(Math.max(40,freq*0.4), t+0.28);
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(Math.min(0.18, 0.05+size*0.004), t+0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t+0.32);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(t); o.stop(t+0.34);
+  }
+  document.getElementById('mute').addEventListener('click', (e)=>{
+    muted = !muted;
+    e.target.textContent = muted ? '🔇' : '🔊';
+  });
+
+  // ---------- palette ----------
+  const DEBRIS_COLORS = ['#ff8a65','#6fffb0','#6fc9ff','#ffe66f','#c792ff','#ff9ecf','#8affea'];
+
+  // ---------- world state ----------
+  let world = { w:0, h:0 };
+  let hole = { x:0, y:0, r:0, targetX:0, targetY:0, spin:0 };
+  let objects = [];
+  let particles = [];
+  let stars = [];
+  let level = 1;
+  let clearedCount = 0;
+  let pointer = { active:false, x:0, y:0 };
+  let camera = { x:0, y:0 };
+  let cleared = false;
+
+  function rand(a,b){ return a + Math.random()*(b-a); }
+  function pick(arr){ return arr[(Math.random()*arr.length)|0]; }
+
+  function buildLevel(n){
+    cleared = false;
+    document.getElementById('overlay').classList.remove('show');
+    const scale = 1 + (n-1)*0.28;
+    world.w = 1600*Math.sqrt(scale);
+    world.h = 1200*Math.sqrt(scale);
+    hole.x = world.w/2; hole.y = world.h/2;
+    hole.r = 22;
+    hole.targetX = hole.x; hole.targetY = hole.y;
+
+    objects = [];
+    const count = Math.round(70 * scale);
+    // size tiers so the well always has something bite-sized nearby, and bigger goals further out
+    for(let i=0;i<count;i++){
+      const tier = Math.random();
+      let r;
+      if(tier < 0.45) r = rand(6,14);
+      else if(tier < 0.75) r = rand(14,26);
+      else if(tier < 0.93) r = rand(26,42);
+      else r = rand(42,70);
+      let x,y,tries=0, ok=false;
+      do{
+        x = rand(r+20, world.w-r-20);
+        y = rand(r+20, world.h-r-20);
+        ok = Math.hypot(x-hole.x, y-hole.y) > 160;
+        tries++;
+      } while(!ok && tries<20);
+      objects.push({
+        x,y,r, baseR:r,
+        color: pick(DEBRIS_COLORS),
+        shape: pick(['circle','square','triangle','diamond']),
+        wob: Math.random()*Math.PI*2,
+        alive:true, scale:1
+      });
+    }
+    clearedCount = 0;
+    document.getElementById('total').textContent = objects.length;
+    document.getElementById('cleared').textContent = 0;
+    document.getElementById('bar').style.width = '0%';
+    updateRadiusStat();
+
+    stars = [];
+    const starCount = Math.round((isTouchDevice ? 110 : 220)*scale);
+    for(let i=0;i<starCount;i++){
+      stars.push({
+        x: rand(0, world.w), y: rand(0, world.h),
+        r: rand(0.4,1.8), tw: Math.random()*Math.PI*2, sp: rand(0.5,1.5)
+      });
+    }
+  }
+
+  function updateRadiusStat(){
+    document.getElementById('radiusStat').textContent = Math.round(hole.r);
+  }
+
+  // ---------- input ----------
+  function setPointer(cx, cy){
+    pointer.active = true;
+    pointer.x = cx + camera.x;
+    pointer.y = cy + camera.y;
+  }
+  canvas.addEventListener('pointerdown', e=>{
+    ensureAudio();
+    if(audioCtx && audioCtx.state==='suspended') audioCtx.resume();
+    setPointer(e.clientX, e.clientY);
+  });
+  canvas.addEventListener('pointermove', e=>{
+    if(e.buttons || e.pointerType==='touch') setPointer(e.clientX, e.clientY);
+  });
+  window.addEventListener('pointerup', ()=>{ pointer.active=false; });
+  canvas.addEventListener('pointerleave', ()=>{});
+
+  // keyboard fallback
+  const keys = {};
+  window.addEventListener('keydown', e=>{ keys[e.key.toLowerCase()]=true; });
+  window.addEventListener('keyup', e=>{ keys[e.key.toLowerCase()]=false; });
+
+  // ---------- particles ----------
+  function burst(x,y,color,n){
+    for(let i=0;i<n;i++){
+      const a = Math.random()*Math.PI*2;
+      const sp = rand(0.6,3.2);
+      particles.push({
+        x,y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp,
+        life:1, color, r: rand(1,3)
+      });
+    }
+  }
+
+  // ---------- update ----------
+  function update(dt){
+    // movement
+    let dx=0, dy=0;
+    if(keys['arrowup']||keys['w']) dy -= 1;
+    if(keys['arrowdown']||keys['s']) dy += 1;
+    if(keys['arrowleft']||keys['a']) dx -= 1;
+    if(keys['arrowright']||keys['d']) dx += 1;
+    if(dx||dy){
+      const len = Math.hypot(dx,dy)||1;
+      hole.x += (dx/len) * 260 * dt;
+      hole.y += (dy/len) * 260 * dt;
+    } else if(pointer.active){
+      const ddx = pointer.x - hole.x, ddy = pointer.y - hole.y;
+      const dist = Math.hypot(ddx,ddy);
+      if(dist > 2){
+        const speed = Math.min(dist*4.2, 420);
+        hole.x += (ddx/dist) * speed * dt;
+        hole.y += (ddy/dist) * speed * dt;
+      }
+    }
+    hole.x = Math.max(hole.r, Math.min(world.w-hole.r, hole.x));
+    hole.y = Math.max(hole.r, Math.min(world.h-hole.r, hole.y));
+    hole.spin += dt * 1.4;
+
+    // camera follows with slight ease
+    const desiredCamX = hole.x - W/2, desiredCamY = hole.y - H/2;
+    camera.x += (desiredCamX - camera.x) * Math.min(1, dt*6);
+    camera.y += (desiredCamY - camera.y) * Math.min(1, dt*6);
+    camera.x = Math.max(0, Math.min(world.w-W, camera.x));
+    camera.y = Math.max(0, Math.min(world.h-H, camera.y));
+
+    // objects: gentle drift/wobble + absorption
+    for(const o of objects){
+      if(!o.alive) continue;
+      o.wob += dt;
+      const d = Math.hypot(o.x-hole.x, o.y-hole.y);
+      const pull = hole.r*3.2;
+      if(d < pull && o.r < hole.r*0.98){
+        // gravitational drift toward hole
+        const f = (1 - d/pull) * 90;
+        o.x += (hole.x-o.x)/ (d||1) * f * dt;
+        o.y += (hole.y-o.y)/ (d||1) * f * dt;
+      }
+      if(d < hole.r + o.r*0.35 && o.r < hole.r*0.98){
+        // consume
+        o.alive = false;
+        clearedCount++;
+        burst(o.x,o.y,o.color, Math.round(6+o.r/4));
+        pop(220 + o.r*4, o.r);
+        if(isTouchDevice && navigator.vibrate) navigator.vibrate(Math.min(15, 6+o.r*0.1));
+        // grow (area-based so growth feels smooth, not spiky)
+        const newArea = Math.PI*hole.r*hole.r + Math.PI*o.r*o.r*0.55;
+        hole.r = Math.sqrt(newArea/Math.PI);
+        updateRadiusStat();
+        document.getElementById('cleared').textContent = clearedCount;
+        document.getElementById('bar').style.width = Math.round(100*clearedCount/objects.length)+'%';
+        if(clearedCount >= objects.length && !cleared){
+          cleared = true;
+          setTimeout(()=>{ document.getElementById('overlay').classList.add('show'); }, 500);
+        }
+      }
+    }
+
+    for(let i=particles.length-1;i>=0;i--){
+      const p = particles[i];
+      p.x += p.vx; p.y += p.vy;
+      p.vx *= 0.94; p.vy *= 0.94;
+      p.life -= dt*1.6;
+      if(p.life<=0) particles.splice(i,1);
+    }
+  }
+
+  // ---------- draw ----------
+  const isTouchDevice = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+
+  function drawShape(shape, x, y, r, color){
+    ctx.fillStyle = color;
+    ctx.save();
+    ctx.translate(x,y);
+    // glow is costly on mobile GPUs (canvas shadowBlur is software-rendered) -
+    // only bother for debris big enough that the glow is actually visible
+    if(!isTouchDevice || r > 20){
+      ctx.shadowColor = color;
+      ctx.shadowBlur = isTouchDevice ? r*0.45 : r*0.8;
+    }
+    if(shape==='circle'){
+      ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2); ctx.fill();
+    } else if(shape==='square'){
+      ctx.rotate(0.2);
+      ctx.fillRect(-r*0.8,-r*0.8,r*1.6,r*1.6);
+    } else if(shape==='triangle'){
+      ctx.beginPath();
+      ctx.moveTo(0,-r); ctx.lineTo(r*0.87,r*0.6); ctx.lineTo(-r*0.87,r*0.6);
+      ctx.closePath(); ctx.fill();
+    } else if(shape==='diamond'){
+      ctx.beginPath();
+      ctx.moveTo(0,-r); ctx.lineTo(r,0); ctx.lineTo(0,r); ctx.lineTo(-r,0);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function draw(t){
+    ctx.clearRect(0,0,W,H);
+
+    // background gradient
+    const bg = ctx.createRadialGradient(W/2,H*0.4,0, W/2,H*0.4, Math.max(W,H)*0.9);
+    bg.addColorStop(0,'#1a0f30');
+    bg.addColorStop(1,'#0a0612');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0,0,W,H);
+
+    ctx.save();
+    ctx.translate(-camera.x, -camera.y);
+
+    // stars
+    for(const s of stars){
+      const alpha = 0.4 + 0.6*Math.sin(t*0.001*s.sp + s.tw);
+      ctx.globalAlpha = Math.max(0.15, alpha);
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    // world bounds vignette frame (soft)
+    ctx.strokeStyle = 'rgba(124,92,255,0.15)';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(2,2,world.w-4, world.h-4);
+
+    // objects
+    for(const o of objects){
+      if(!o.alive) continue;
+      const wob = Math.sin(o.wob*1.5)*1.2;
+      drawShape(o.shape, o.x, o.y+wob, o.r, o.color);
+    }
+
+    // particles
+    for(const p of particles){
+      ctx.globalAlpha = Math.max(0,p.life);
+      ctx.fillStyle = p.color;
+      ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    // hole: accretion disk + event horizon
+    const rimR = hole.r*1.9;
+    const disk = ctx.createRadialGradient(hole.x,hole.y, hole.r*0.6, hole.x,hole.y, rimR);
+    disk.addColorStop(0, 'rgba(124,92,255,0.0)');
+    disk.addColorStop(0.55, 'rgba(124,92,255,0.35)');
+    disk.addColorStop(0.8, 'rgba(255,111,174,0.55)');
+    disk.addColorStop(1, 'rgba(255,209,102,0)');
+    ctx.save();
+    ctx.translate(hole.x,hole.y);
+    ctx.rotate(hole.spin);
+    ctx.translate(-hole.x,-hole.y);
+    ctx.fillStyle = disk;
+    ctx.beginPath(); ctx.arc(hole.x,hole.y,rimR,0,Math.PI*2); ctx.fill();
+
+    // dashed ring
+    ctx.strokeStyle = 'rgba(255,224,166,0.55)';
+    ctx.lineWidth = Math.max(1.5, hole.r*0.05);
+    ctx.setLineDash([hole.r*0.35, hole.r*0.25]);
+    ctx.beginPath(); ctx.arc(hole.x,hole.y, hole.r*1.35, 0, Math.PI*2); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+
+    // event horizon core
+    ctx.beginPath();
+    ctx.fillStyle = '#050208';
+    ctx.shadowColor = 'rgba(124,92,255,0.9)';
+    ctx.shadowBlur = hole.r*0.9;
+    ctx.arc(hole.x, hole.y, hole.r, 0, Math.PI*2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // ghost cursor: shows where the finger/pointer is and how it connects to the well
+    if(pointer.active){
+      const dist = Math.hypot(pointer.x-hole.x, pointer.y-hole.y);
+      const alpha = Math.min(0.55, 0.15 + dist/500);
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = '#ffe0a6';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([6,8]);
+      ctx.beginPath();
+      ctx.moveTo(hole.x, hole.y);
+      ctx.lineTo(pointer.x, pointer.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.globalAlpha = Math.min(0.85, alpha+0.25);
+      ctx.beginPath();
+      ctx.arc(pointer.x, pointer.y, 14, 0, Math.PI*2);
+      ctx.strokeStyle = '#ffe0a6';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(pointer.x, pointer.y, 3, 0, Math.PI*2);
+      ctx.fillStyle = '#ffe0a6';
+      ctx.fill();
+      ctx.restore();
+    }
+
+    ctx.restore();
+  }
+
+  // ---------- loop ----------
+  let last = performance.now();
+  function loop(t){
+    const dt = Math.min(0.033, (t-last)/1000);
+    last = t;
+    update(dt);
+    draw(t);
+    requestAnimationFrame(loop);
+  }
+
+  document.getElementById('next').addEventListener('click', ()=>{
+    level++;
+    buildLevel(level);
+  });
+  document.getElementById('begin').addEventListener('click', ()=>{
+    ensureAudio();
+    if(audioCtx && audioCtx.state==='suspended') audioCtx.resume();
+    document.getElementById('start').style.display = 'none';
+    buildLevel(level);
+    requestAnimationFrame((t)=>{ last=t; requestAnimationFrame(loop); });
+  });
+
+  buildLevel(level); // pre-build so it's ready behind the start screen
+})();
+</script>
+</body>
+</html>
